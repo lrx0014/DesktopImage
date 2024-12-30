@@ -1,0 +1,12 @@
+[Unit]
+Description=A tool to automatically generate .desktop files for AppImage applications
+
+[Service]
+ExecStart=/usr/bin/desktopimage
+Restart=always
+Environment=GOTRACEBACK=all
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
