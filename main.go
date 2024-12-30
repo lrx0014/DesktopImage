@@ -49,7 +49,7 @@ func createDefaultConfig(configFilePath string) error {
 }
 
 func isConfigValid(cfg Config) bool {
-	return cfg.AppPath != "" && cfg.DesktopPath != "" && cfg.IconPath != "" && cfg.Categories != ""
+	return cfg.AppPath != "" && cfg.DesktopPath != "" && cfg.Categories != ""
 }
 
 func loadConfig(configFilePath string) error {
@@ -197,10 +197,13 @@ func createDesktopFile(appName, desktopFilePath string) error {
 Type=Application
 Name=%s
 Exec=%s/%s
-Icon=%s
 Terminal=false
 Categories=%s
-`, appName, config.AppPath, appName+".AppImage", config.IconPath, config.Categories)
+`, appName, config.AppPath, appName+".AppImage", config.Categories)
+
+	if config.IconPath != "" {
+		content += fmt.Sprintf("Icon=%s\n", config.IconPath)
+	}
 
 	return os.WriteFile(desktopFilePath, []byte(content), 0644)
 }
