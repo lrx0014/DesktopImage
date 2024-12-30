@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+const (
+	configFilePath = "/etc/desktopimage/config.toml"
+)
+
 type Config struct {
 	AppPath     string `toml:"app_path"`
 	DesktopPath string `toml:"desktop_path"`
@@ -22,10 +26,6 @@ type Config struct {
 var (
 	config Config
 	log    = logrus.New()
-)
-
-const (
-	configFilePath = "/etc/desktopimage/config.toml"
 )
 
 func ensureConfigDirectoryExists(configDirPath string) error {
@@ -48,18 +48,22 @@ func createDefaultConfig(configFilePath string) error {
 	return os.WriteFile(configFilePath, []byte(defaultConfig), 0644)
 }
 
+func isConfigValid(cfg Config) bool {
+	return cfg.AppPath != "" && cfg.DesktopPath != "" && cfg.IconPath != "" && cfg.Categories != ""
+}
+
 func loadConfig(configFilePath string) error {
 	configDirPath := filepath.Dir(configFilePath)
 	if err := ensureConfigDirectoryExists(configDirPath); err != nil {
 		return err
 	}
+
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		log.Warnf("Configuration file %s does not exist. Creating default template.", configFilePath)
 		if err := createDefaultConfig(configFilePath); err != nil {
 			return fmt.Errorf("failed to create default config file: %w", err)
 		}
 		log.Infof("Default configuration template created at %s. Please edit and uncomment required fields.", configFilePath)
-		os.Exit(0)
 	}
 
 	content, err := os.ReadFile(configFilePath)
@@ -72,7 +76,37 @@ func loadConfig(configFilePath string) error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	if !isConfigValid(config) {
+		log.Warn("Configuration file is incomplete or invalid. Waiting for user to update it.")
+		return nil
+	}
+
+	log.Infof("Configuration successfully loaded from %s.", configFilePath)
 	return nil
+}
+
+func watchConfigFile(configFilePath string, reloadConfig chan bool) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatalf("Error initializing config file watcher: %v", err)
+	}
+	defer watcher.Close()
+
+	if err := watcher.Add(filepath.Dir(configFilePath)); err != nil {
+		log.Fatalf("Error adding config directory to watcher: %v", err)
+	}
+
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && filepath.Base(event.Name) == filepath.Base(configFilePath) {
+				log.Infof("Configuration file %s changed, reloading...", configFilePath)
+				reloadConfig <- true
+			}
+		case err := <-watcher.Errors:
+			log.Errorf("Config watcher error: %v", err)
+		}
+	}
 }
 
 func checkEnvironment() {
@@ -93,55 +127,69 @@ func main() {
 
 	checkEnvironment()
 
+	reloadConfig := make(chan bool)
+	go watchConfigFile(configFilePath, reloadConfig)
+
 	if err := loadConfig(configFilePath); err != nil {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
 
 	log.Info("Starting AppImage watcher...")
 
-	// Initialize the watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatalf("Error initializing watcher: %v", err)
+		log.Fatalf("Error initializing file watcher: %v", err)
 	}
 	defer watcher.Close()
 
-	// Add the app directory to the watcher
-	if err := watcher.Add(config.AppPath); err != nil {
-		log.Fatalf("Error adding directory to watcher: %v", err)
+	if config.AppPath != "" {
+		if err := watcher.Add(config.AppPath); err != nil {
+			log.Fatalf("Error adding app directory to watcher: %v", err)
+		}
 	}
 
-	// Process events
-	for {
-		select {
-		case event := <-watcher.Events:
-			if event.Op&fsnotify.Create == fsnotify.Create {
-				if strings.HasSuffix(event.Name, ".AppImage") {
-					appName := strings.TrimSuffix(filepath.Base(event.Name), ".AppImage")
-					desktopFilePath := filepath.Join(config.DesktopPath, appName+".desktop")
-					if err := createDesktopFile(appName, desktopFilePath); err != nil {
-						log.Errorf("Error creating .desktop file for %s: %v", appName, err)
-					} else {
-						log.Infof("Created .desktop file for %s", appName)
-						updateDesktopDatabase()
+	done := make(chan bool)
+	go func() {
+		for {
+			select {
+			case event := <-watcher.Events:
+				if event.Op&fsnotify.Create == fsnotify.Create {
+					if strings.HasSuffix(event.Name, ".AppImage") {
+						appName := strings.TrimSuffix(filepath.Base(event.Name), ".AppImage")
+						desktopFilePath := filepath.Join(config.DesktopPath, appName+".desktop")
+						if err := createDesktopFile(appName, desktopFilePath); err != nil {
+							log.Errorf("Error creating .desktop file for %s: %v", appName, err)
+						} else {
+							log.Infof("Created .desktop file for %s", appName)
+							updateDesktopDatabase()
+						}
+					}
+				} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+					if strings.HasSuffix(event.Name, ".AppImage") {
+						appName := strings.TrimSuffix(filepath.Base(event.Name), ".AppImage")
+						desktopFilePath := filepath.Join(config.DesktopPath, appName+".desktop")
+						if err := os.Remove(desktopFilePath); err != nil {
+							log.Errorf("Error removing .desktop file for %s: %v", appName, err)
+						} else {
+							log.Infof("Removed .desktop file for %s", appName)
+							updateDesktopDatabase()
+						}
 					}
 				}
-			} else if event.Op&fsnotify.Remove == fsnotify.Remove {
-				if strings.HasSuffix(event.Name, ".AppImage") {
-					appName := strings.TrimSuffix(filepath.Base(event.Name), ".AppImage")
-					desktopFilePath := filepath.Join(config.DesktopPath, appName+".desktop")
-					if err := os.Remove(desktopFilePath); err != nil {
-						log.Errorf("Error removing .desktop file for %s: %v", appName, err)
-					} else {
-						log.Infof("Removed .desktop file for %s", appName)
-						updateDesktopDatabase()
+			case <-reloadConfig:
+				if err := loadConfig(configFilePath); err != nil {
+					log.Errorf("Error reloading configuration: %v", err)
+				} else {
+					log.Info("Configuration reloaded successfully.")
+					if err := watcher.Add(config.AppPath); err != nil {
+						log.Errorf("Error adding new app directory to watcher: %v", err)
 					}
 				}
 			}
-		case err := <-watcher.Errors:
-			log.Errorf("Watcher error: %v", err)
 		}
-	}
+	}()
+
+	<-done
 }
 
 func createDesktopFile(appName, desktopFilePath string) error {
