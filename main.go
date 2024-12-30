@@ -81,7 +81,7 @@ func loadConfig(configFilePath string) error {
 		return nil
 	}
 
-	log.Infof("Configuration successfully loaded from %s.", configFilePath)
+	log.Infof("Configuration successfully loaded from %s. with config content = %+v", configFilePath, config)
 	return nil
 }
 
