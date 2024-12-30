@@ -28,6 +28,17 @@ const (
 	configFilePath = "/etc/desktopimage/config.toml"
 )
 
+func ensureConfigDirectoryExists(configDirPath string) error {
+	if _, err := os.Stat(configDirPath); os.IsNotExist(err) {
+		log.Warnf("Configuration directory %s does not exist. Creating it.", configDirPath)
+		if err := os.MkdirAll(configDirPath, 0755); err != nil {
+			return fmt.Errorf("failed to create configuration directory: %w", err)
+		}
+		log.Infof("Configuration directory created at %s.", configDirPath)
+	}
+	return nil
+}
+
 func createDefaultConfig(configFilePath string) error {
 	defaultConfig := `# app_path = "/path/to/app_directory"
 # desktop_path = "/path/to/desktop_directory"
@@ -38,6 +49,10 @@ func createDefaultConfig(configFilePath string) error {
 }
 
 func loadConfig(configFilePath string) error {
+	configDirPath := filepath.Dir(configFilePath)
+	if err := ensureConfigDirectoryExists(configDirPath); err != nil {
+		return err
+	}
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		log.Warnf("Configuration file %s does not exist. Creating default template.", configFilePath)
 		if err := createDefaultConfig(configFilePath); err != nil {
