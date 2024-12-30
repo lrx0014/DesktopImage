@@ -164,7 +164,7 @@ func main() {
 							updateDesktopDatabase()
 						}
 					}
-				} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+				} else if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
 					if strings.HasSuffix(event.Name, ".AppImage") {
 						appName := strings.TrimSuffix(filepath.Base(event.Name), ".AppImage")
 						desktopFilePath := filepath.Join(config.DesktopPath, appName+".desktop")
