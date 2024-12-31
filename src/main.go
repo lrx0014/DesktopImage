@@ -49,7 +49,7 @@ func main() {
 		return
 	}
 
-	fsManager.StartWatchers(ctx)
+	go fsManager.StartWatchers(ctx)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)

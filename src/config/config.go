@@ -23,6 +23,7 @@ var (
 type ConfManager struct {
 	onChangeCallbacks []func(*Config)
 	conf              *Config
+	closeCh           chan struct{}
 }
 
 type Config struct {
@@ -87,6 +88,10 @@ func (cm *ConfManager) AddCallbacks(callbacks ...func(config2 *Config)) {
 }
 
 func (cm *ConfManager) Close() {
+	if cm.closeCh != nil {
+		<-cm.closeCh
+		log.Info("Config Manager closed")
+	}
 	return
 }
 
@@ -106,6 +111,7 @@ func (cm *ConfManager) watch(ctx context.Context) (err error) {
 	}
 
 	var wg sync.WaitGroup
+	cm.closeCh = make(chan struct{})
 
 	wg.Add(1)
 	go func() {
@@ -115,6 +121,7 @@ func (cm *ConfManager) watch(ctx context.Context) (err error) {
 			select {
 			case <-ctx.Done():
 				log.Info("Stopping config file watcher.")
+				cm.closeCh <- struct{}{}
 				return
 			case event := <-watcher.Events:
 				if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && filepath.Base(event.Name) == filepath.Base(configPath) {

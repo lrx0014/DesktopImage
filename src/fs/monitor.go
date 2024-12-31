@@ -24,6 +24,7 @@ type FManager struct {
 	currentWatchers map[string]context.CancelFunc
 	mutex           sync.Mutex
 	cm              *config.ConfManager
+	closeCh         chan struct{}
 }
 
 func NewFsManager(cm *config.ConfManager) (fm *FManager, err error) {
@@ -63,6 +64,10 @@ func (fm *FManager) StartWatchers(ctx context.Context) {
 }
 
 func (fm *FManager) Close() {
+	if fm.closeCh != nil {
+		<-fm.closeCh
+		log.Info("FS Manager closed")
+	}
 	return
 }
 
@@ -79,10 +84,13 @@ func (fm *FManager) startWatching(ctx context.Context, watcherConfig config.Watc
 
 	log.Infof("Starting file watcher on: %s => %s", watcherConfig.AppPath, watcherConfig.DesktopPath)
 
+	fm.closeCh = make(chan struct{})
+
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("Stopping AppImage watcher.")
+			fm.closeCh <- struct{}{}
 			return
 		case event := <-watcher.Events:
 			if event.Op&fsnotify.Create == fsnotify.Create {
