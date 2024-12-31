@@ -11,16 +11,16 @@ source=("git+$url.git#branch=master")
 sha256sums=('SKIP')
 
 pkgver() {
-    cd "$srcdir/$pkgname"
+    cd "$srcdir/DesktopImage"
     git describe --tags --always | sed 's/^v//'
 }
 
 build() {
-    cd "$srcdir/$pkgname/src"
+    cd "$srcdir/DesktopImage/src"
     go build -o desktopimage main.go
 }
 
 package() {
-    install -Dm755 "$srcdir/$pkgname/src/desktopimage" "$pkgdir/usr/bin/desktopimage"
-    install -Dm644 "$srcdir/$pkgname/desktopimage.service" "$pkgdir/etc/systemd/system/desktopimage.service"
+    install -Dm755 "$srcdir/DesktopImage/src/desktopimage" "$pkgdir/usr/bin/desktopimage"
+    install -Dm644 "$srcdir/DesktopImage/desktopimage.service" "$pkgdir/etc/systemd/system/desktopimage.service"
 }
