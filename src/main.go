@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/pelletier/go-toml"
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"syscall"
 )
 
 const (
@@ -85,7 +89,7 @@ func loadConfig(configFilePath string) error {
 	return nil
 }
 
-func watchConfigFile(configFilePath string, reloadConfig chan bool) {
+func watchConfigFile(ctx context.Context, configFilePath string, reloadConfig chan bool) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatalf("Error initializing config file watcher: %v", err)
@@ -98,6 +102,9 @@ func watchConfigFile(configFilePath string, reloadConfig chan bool) {
 
 	for {
 		select {
+		case <-ctx.Done():
+			log.Info("Stopping config file watcher.")
+			return
 		case event := <-watcher.Events:
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && filepath.Base(event.Name) == filepath.Base(configFilePath) {
 				log.Infof("Configuration file %s changed, reloading...", configFilePath)
@@ -128,7 +135,15 @@ func main() {
 	checkEnvironment()
 
 	reloadConfig := make(chan bool)
-	go watchConfigFile(configFilePath, reloadConfig)
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+
+	// Start watching config file
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		watchConfigFile(ctx, configFilePath, reloadConfig)
+	}()
 
 	if err := loadConfig(configFilePath); err != nil {
 		log.Fatalf("Error loading configuration: %v", err)
@@ -148,10 +163,14 @@ func main() {
 		}
 	}
 
-	done := make(chan bool)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
+			case <-ctx.Done():
+				log.Info("Stopping AppImage watcher.")
+				return
 			case event := <-watcher.Events:
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					if strings.HasSuffix(event.Name, ".AppImage") {
@@ -189,7 +208,13 @@ func main() {
 		}
 	}()
 
-	<-done
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+	<-sigs
+	log.Info("Shutdown signal received.")
+	cancel()
+	wg.Wait()
+	log.Info("All tasks stopped. Exiting.")
 }
 
 func createDesktopFile(appName, desktopFilePath string) error {
