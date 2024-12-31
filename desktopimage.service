@@ -1,5 +1,5 @@
 [Unit]
-Description=A tool to automatically generate .desktop files for AppImage applications
+Description=DesktopImage
 
 [Service]
 ExecStart=/usr/bin/desktopimage
