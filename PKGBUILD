@@ -7,7 +7,7 @@ url="https://github.com/lrx0014/DesktopImage"
 license=('MIT')
 depends=('glibc')
 makedepends=('git' 'go')
-source=("git+$url.git#branch=master")
+source=("git+$url.git#tag=v$pkgver")
 sha256sums=('SKIP')
 
 pkgver() {
