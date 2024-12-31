@@ -4,19 +4,32 @@ Automatically convert **.AppImage** to **.desktop** Application in Linux
 > This tool has only been tested briefly on Arch Linux
 
 ## Installation
-clone this repo and then:
+**Clone this repo:**
 ```shell
+git clone https://github.com/lrx0014/DesktopImage.git
 cd DesktopImage
+```
+
+**For ArchLinux Users:**
+```shell
 makepkg -si
 
 sudo systemctl start desktopimage
 # if you prefer auto-start at boot
 sudo systemctl enable desktopimage
+```
 
+**For other distro, you could compile it with go:**
+```shell
+go build -o DesktopImage src/main.go
+```
+
+## Configuration
+```shell
 # modify the configuration to specify your path to monitor
 # otherwise the process will do nothing due to the initiate configuration is empty
 vim /etc/desktopimage/config.toml
-```
+``` 
 
 ## Example
 assume that we have a configuration as follows:
