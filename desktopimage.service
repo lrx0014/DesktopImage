@@ -1,12 +1,15 @@
 [Unit]
 Description=DesktopImage
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 ExecStart=/usr/bin/desktopimage
-Restart=always
 Environment=GOTRACEBACK=all
 StandardOutput=journal
 StandardError=journal
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
